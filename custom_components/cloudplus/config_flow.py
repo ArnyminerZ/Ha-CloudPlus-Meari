@@ -52,11 +52,14 @@ class CloudPlusConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 await self.hass.async_add_executor_job(client.login)
                 snap_devices = client.get_snap_devices()
-            except PermissionError:
+            except PermissionError as e:
+                _LOGGER.error(e)
                 errors["base"] = "invalid_auth"
-            except (ConnectionError, OSError):
+            except (ConnectionError, OSError) as e:
+                _LOGGER.error(e)
                 errors["base"] = "cannot_connect"
-            except Exception:
+            except Exception as e:
+                _LOGGER.error(e)
                 _LOGGER.exception("Unexpected exception during login")
                 errors["base"] = "unknown"
             else:
