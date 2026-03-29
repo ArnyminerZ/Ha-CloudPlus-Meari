@@ -48,11 +48,13 @@ class CloudPlusCoordinator:
     _W_STREAMING = 2
 
     def __init__(
-        self, hass: HomeAssistant, email: str, password: str, device: dict[str, Any]
+        self, hass: HomeAssistant, email: str, password: str, phone_code: str, country_code: str, device: dict[str, Any]
     ) -> None:
         self.hass = hass
         self._email = email
         self._password = password
+        self._phone_code = phone_code
+        self._country_code = country_code
         self._device = device
         self._device_id = device["deviceID"]
         self._sn_num = device.get("snNum", "")
@@ -989,7 +991,7 @@ class CloudPlusCoordinator:
     def _run_session(self) -> None:
         """Single session: login → MQTT → grab initial frame → event loop."""
         # Login
-        api = MeariApiClient(email=self._email, password=self._password)
+        api = MeariApiClient(email=self._email, password=self._password, country_code=self._country_code, phone_code=self._phone_code)
         try:
             api.login()
         except PermissionError:
