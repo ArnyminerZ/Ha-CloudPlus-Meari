@@ -4,6 +4,8 @@ DOMAIN = "cloudplus"
 
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
+CONF_COUNTRY_CODE = "country_code"
+CONF_PHONE_CODE = "phone_code"
 CONF_DEVICE_ID = "device_id"
 CONF_SN_NUM = "sn_num"
 CONF_DEVICE_NAME = "device_name"

@@ -12,6 +12,8 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from .const import (
     CONF_EMAIL,
     CONF_PASSWORD,
+    CONF_COUNTRY_CODE,
+    CONF_PHONE_CODE,
     DOMAIN,
 )
 from .api import MeariApiClient
@@ -22,6 +24,8 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_EMAIL): str,
         vol.Required(CONF_PASSWORD): str,
+        vol.Required(CONF_COUNTRY_CODE): str,
+        vol.Required(CONF_PHONE_CODE): str,
     }
 )
 
@@ -40,8 +44,10 @@ class CloudPlusConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             email = user_input[CONF_EMAIL].strip()
             password = user_input[CONF_PASSWORD]
+            country_code = user_input[CONF_COUNTRY_CODE]
+            phone_code = user_input[CONF_PHONE_CODE]
 
-            client = MeariApiClient(email=email, password=password)
+            client = MeariApiClient(email=email, password=password, country_code=country_code, phone_code=phone_code)
 
             try:
                 await self.hass.async_add_executor_job(client.login)
@@ -66,6 +72,8 @@ class CloudPlusConfigFlow(ConfigFlow, domain=DOMAIN):
                         data={
                             CONF_EMAIL: email,
                             CONF_PASSWORD: password,
+                            CONF_COUNTRY_CODE: country_code,
+                            CONF_PHONE_CODE: phone_code,
                         },
                     )
 

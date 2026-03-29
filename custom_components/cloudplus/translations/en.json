@@ -6,7 +6,9 @@
         "description": "Enter your CloudEdge / CloudPlus credentials. All battery cameras on the account will be added automatically.",
         "data": {
           "email": "Email",
-          "password": "Password"
+          "password": "Password",
+          "country_code": "Country Code",
+          "phone_code": "Phone Code"
         }
       }
     },
@@ -22,24 +24,40 @@
   },
   "entity": {
     "binary_sensor": {
-      "motion": { "name": "Motion" },
-      "awake": { "name": "Camera Awake" },
-      "charging": { "name": "Charging" }
+      "motion": {
+        "name": "Motion"
+      },
+      "awake": {
+        "name": "Camera Awake"
+      },
+      "charging": {
+        "name": "Charging"
+      }
     },
     "button": {
-      "wake": { "name": "Wake Camera" }
+      "wake": {
+        "name": "Wake Camera"
+      }
     },
     "camera": {
-      "camera": { "name": "Camera" }
+      "camera": {
+        "name": "Camera"
+      }
     },
     "number": {
-      "motion_timeout": { "name": "Motion Timeout" }
+      "motion_timeout": {
+        "name": "Motion Timeout"
+      }
     },
     "sensor": {
-      "battery": { "name": "Battery" }
+      "battery": {
+        "name": "Battery"
+      }
     },
     "switch": {
-      "motion_wake": { "name": "Wake on Motion" }
+      "motion_wake": {
+        "name": "Wake on Motion"
+      }
     }
   }
 }
