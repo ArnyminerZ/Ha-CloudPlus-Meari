@@ -17,8 +17,11 @@ from datetime import datetime
 from typing import Any, Optional
 
 import requests
-from Crypto.Cipher import AES, DES
+from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
+from cryptography.hazmat.primitives.ciphers import Cipher, modes
+from cryptography.hazmat.primitives.padding import PKCS7
+from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
 
 from .const import (
     APP_VER,
@@ -58,9 +61,11 @@ def _md5_hex(text: str) -> str:
 
 def _des_encrypt(plaintext: str) -> str:
     """DES-CBC encrypt (Meari password encryption)."""
-    cipher = DES.new(DES_KEY[:8], DES.MODE_CBC, DES_IV)
-    ct = cipher.encrypt(pad(plaintext.encode("utf-8"), DES.block_size))
-    return base64.b64encode(ct).decode()
+    padder = PKCS7(64).padder()
+    padded = padder.update(plaintext.encode("utf-8")) + padder.finalize()
+    cipher = Cipher(TripleDES(DES_KEY), modes.CBC(DES_IV))
+    enc = cipher.encryptor()
+    return base64.b64encode(enc.update(padded) + enc.finalize()).decode()
 
 
 def _aes_encrypt(plaintext: str, key_str: str) -> str:
@@ -80,8 +85,14 @@ def _aes_decrypt(ciphertext_b64: str, key_str: str) -> str:
     return unpad(cipher.decrypt(ct), AES.block_size).decode("utf-8")
 
 
-def _encode_user_account(email: str, api_path: str, timestamp_ms: int) -> str:
-    raw_key = f"{api_path}{PARTNER_ID}{TTID}{timestamp_ms}"
+def _encode_user_account(
+    email: str,
+    api_path: str,
+    timestamp_ms: int,
+    partner_id: str = PARTNER_ID,
+    ttid: str = TTID,
+) -> str:
+    raw_key = f"{api_path}{partner_id}{ttid}{timestamp_ms}"
     key_b64 = base64.b64encode(raw_key.encode()).decode()
     key16 = key_b64[:16]
     return _aes_encrypt(email, key16)
@@ -114,7 +125,7 @@ class MeariApiClient:
         self.email = email
         self.password = password
         self.country_code = country_code
-        self.phone_code = phone_code
+        self.phone_code = phone_code if phone_code.startswith("+") else f"+{phone_code}"
 
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": USER_AGENT})
@@ -147,8 +158,9 @@ class MeariApiClient:
         else:
             ca_key = DEFAULT_CA_KEY
             sign_key = DEFAULT_CA_SECRET
+        real_path = api_path.lstrip("/")
         msg = (
-            f"api=/ppstrongs/{api_path}"
+            f"api=/ppstrongs/{real_path}"
             f"|X-Ca-Key={ca_key}"
             f"|X-Ca-Timestamp={ts}"
             f"|X-Ca-Nonce={nonce}"
@@ -162,6 +174,8 @@ class MeariApiClient:
         }
 
     def _sign_params(self, params: dict) -> dict:
+        if not self.user_token:
+            raise RuntimeError("Not authenticated: missing user token")
         params = dict(params)
         sorted_keys = sorted(params.keys())
         content = "&".join(f"{k}={params[k]}" for k in sorted_keys)
@@ -247,12 +261,13 @@ class MeariApiClient:
 
     def _redirect(self) -> None:
         ts = int(time.time() * 1000)
-        nonce = "".join(str(random.randint(0, 9)) for _ in range(8))
+        query_nonce = "".join(str(random.randint(0, 9)) for _ in range(8))
+        header_nonce = str(random.randint(100000, 999999))
         sign = _md5_hex(f"GET|/ppstrongs/redirect|{ts}|apis.meari.com.cn")
         params = {
             "t": str(ts),
             "localTime": str(ts),
-            "nonce": nonce,
+            "nonce": query_nonce,
             "sign": sign,
             "partnerId": PARTNER_ID,
             "phoneType": PHONE_TYPE,
@@ -260,14 +275,25 @@ class MeariApiClient:
             "appVer": APP_VER,
             "appVerCode": APP_VER_CODE,
             "countryCode": self.country_code,
-            "phoneCode": self.phone_code,
+            "phoneCode": self.phone_code.lstrip("+"),
             "lngType": "en",
             "userAccount": _encode_user_account(
                 self.email, "/ppstrongs/redirect", ts
             ),
         }
         path = "/ppstrongs/redirect"
-        headers = self._ca_headers(path)
+        ca_sign_data = (
+            f"api=/ppstrongs//ppstrongs/redirect"
+            f"|X-Ca-Key={DEFAULT_CA_KEY}"
+            f"|X-Ca-Timestamp={ts}"
+            f"|X-Ca-Nonce={header_nonce}"
+        )
+        headers = {
+            "X-Ca-Timestamp": str(ts),
+            "X-Ca-Key": DEFAULT_CA_KEY,
+            "X-Ca-Nonce": header_nonce,
+            "X-Ca-Sign": _hmac_sha1_b64(ca_sign_data, DEFAULT_CA_SECRET),
+        }
         url = REDIRECT_URL + path
         r = self.session.get(url, params=params, headers=headers)
         r.raise_for_status()
@@ -281,6 +307,8 @@ class MeariApiClient:
     def _do_login(self) -> None:
         ts = int(time.time() * 1000)
         path = "/meari/app/login"
+        encrypted_account = _encode_user_account(self.email, path, ts)
+        encrypted_password = _des_encrypt(self.password)
         params = {
             "phoneType": PHONE_TYPE,
             "sourceApp": SOURCE_APP,
@@ -290,13 +318,29 @@ class MeariApiClient:
             "phoneCode": self.phone_code,
             "lngType": "en",
             "t": str(ts),
-            "userAccount": _encode_user_account(self.email, path, ts),
+            "userAccount": encrypted_account,
             "localTime": str(ts),
-            "password": _des_encrypt(self.password),
+            "password": encrypted_password,
             "iotType": "4",
-            "equipmentNo": " ",
+            "equipmentNo": "",
         }
-        headers = self._ca_headers(path)
+        ca_nonce = str(int(time.time() * 1000000) % 100000000)
+        ca_sign_data = (
+            f"phoneType={PHONE_TYPE}&sourceApp={SOURCE_APP}&appVer={APP_VER}&"
+            f"iotType=4&equipmentNo=&appVerCode={APP_VER_CODE}&localTime={ts}&"
+            f"password={encrypted_password}&t={ts}&lngType=en&countryCode={self.country_code}&"
+            f"userAccount={encrypted_account}&phoneCode={self.phone_code}"
+        )
+        headers = {
+            "Accept-Language": "en-US,en;q=0.8",
+            "User-Agent": USER_AGENT,
+            "X-Ca-Timestamp": str(ts),
+            "X-Ca-Sign": _hmac_sha1_b64(ca_sign_data, DEFAULT_CA_KEY),
+            "X-Ca-Key": DEFAULT_CA_KEY,
+            "X-Ca-Nonce": ca_nonce,
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept-Encoding": "gzip, deflate, br",
+        }
         url = self.api_server + path
         r = self.session.post(url, data=params, headers=headers)
         r.raise_for_status()
@@ -326,7 +370,7 @@ class MeariApiClient:
         plat_signature = platform.get("signature", "")
         expire_time = str(platform.get("expireTime", ""))
         if plat_signature and expire_time:
-            key_temp = f"{self.user_id}{PARTNER_ID}{TTID}{expire_time}"
+            key_temp = f"{self.user_id}8a{expire_time}"
             key_b64 = base64.b64encode(key_temp.encode()).decode().rstrip("=")
             key16 = key_b64[:16]
             decrypted = _aes_decrypt(plat_signature, key16)
