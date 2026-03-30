@@ -32,7 +32,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     coordinators: list[CloudPlusCoordinator] = []
     for dev in snap_devices:
-        coord = CloudPlusCoordinator(hass, email, password, country_code, phone_code, dev)
+        coord = CloudPlusCoordinator(hass, email, password, phone_code, country_code, dev)
         coordinators.append(coord)
 
     hass.data[DOMAIN][entry.entry_id] = coordinators
