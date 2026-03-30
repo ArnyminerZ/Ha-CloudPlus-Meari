@@ -14,6 +14,7 @@ from .const import (
     CONF_PASSWORD,
     CONF_COUNTRY_CODE,
     CONF_PHONE_CODE,
+    COUNTRY_CODES,
     DOMAIN,
 )
 from .api import MeariApiClient
@@ -24,8 +25,12 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_EMAIL): str,
         vol.Required(CONF_PASSWORD): str,
-        vol.Required(CONF_COUNTRY_CODE): str,
-        vol.Required(CONF_PHONE_CODE): str,
+        vol.Required(CONF_COUNTRY_CODE, default="FR"): vol.In(
+            list(COUNTRY_CODES.keys())
+        ),
+        vol.Required(CONF_PHONE_CODE, default="+33"): vol.In(
+            list(COUNTRY_CODES.values())
+        ),
     }
 )
 
